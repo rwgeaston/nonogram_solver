@@ -17,6 +17,8 @@ class NonogramGrid(list):
         self.rows = row_values
         self.max_column_options = max((len(values) for values in column_values))
         self.max_row_options = max((len(values) for values in row_values))
+        # self.size['row'] tells us the size of a row i.e. the width of the grid i.e. how many columns.
+        self.size = {'row': len(self.columns), 'column': len(self.rows)}
         self.enforce_inputs()
         for i, row in enumerate(row_values):
             self.append([NonogramTile(j, i, column, row) for j, column in enumerate(column_values)])
@@ -36,11 +38,27 @@ class NonogramGrid(list):
     def get_row(self, vert):
         return self[vert]
 
+    def get_rows(self):
+        for row in self:
+            yield row
+
     def get_column(self, horiz):
         return [row[horiz] for row in self]
 
+    def get_columns(self):
+        for column in xrange(len(self[0])):
+            return self.get_column(column)
+
+    def get_line(self, direction, index):
+        if direction == 'row':
+            return self.get_row(index)
+        elif direction == 'column':
+            return self.get_column(index)
+        else:
+            raise NonogramBadRequest("This is not a direction! {}".format(direction))
+
     def __str__(self):
-        rows = []
+        rows = ['']
         for negative_row in range(-self.max_column_options, 0):
             row = []
             for column in self.columns:
@@ -53,13 +71,22 @@ class NonogramGrid(list):
 
         rows.append(' ' * (self.max_row_options*2 + 1) + '_' * (len(self.columns)*2 - 1))
         for row_input_values, row_current_values in zip(self.rows, self):
-            row_string = '{}{} |{}'.format(
-                ' ' * (self.max_row_options - len(row_input_values)) * 2,
-                ','.join([str(value) for value in row_input_values]),
-                ' '.join([str(tile) for tile in row_current_values])
+            actual_values = [str(tile) for tile in row_current_values]
+            row_string = u'{}{} |{}'.format(
+                u' ' * (self.max_row_options - len(row_input_values)) * 2,
+                u','.join([str(value) for value in row_input_values]),
+                u' '.join(actual_values)
             )
             rows.append(row_string)
-        return '\n'.join(rows)
+        rows.append('')
+        return u'\n'.join(rows)
+
+    def completed(self, direction, index):
+        if direction == 'row':
+            current_tiles = self.get_row(index)
+        elif direction == 'column':
+            current_tiles = self.get_column(index)
+        return all((tile.decided[direction] for tile in current_tiles))
 
 empty = 'x'
 
@@ -82,11 +109,12 @@ class NonogramTile(object):
         #print "creating: {}".format(repr(self))
 
     def check_if_decided(self):
-        possibilities_left = len(self.possible_values)
-        if possibilities_left == 0:
-            raise NonogramImpossible("Tile {} can't take any values".format(self))
-        elif possibilities_left == 1:
-            self.decided = True
+        for direction, possible_values in self.possible_values.iteritems():
+            possibilities_left = len(possible_values)
+            if possibilities_left == 0:
+                raise NonogramImpossible("Tile {} can't take any values".format(self))
+            elif possibilities_left == 1:
+                self.decided[direction] = True
 
     def remove_option(self, value, direction=None):
         if value == empty:
@@ -107,9 +135,38 @@ class NonogramTile(object):
             self.possible_values[direction].remove(value)
         else:
             raise NonogramBadRequest(
-                "Can't work out what to do with these inputs {} {} in tile {}"
+                "Can't work out what to do with these inputs '{}' '{}' in tile {}"
                 .format(value, direction, repr(self))
             )
+        self.check_if_decided()
+
+    def set_only_option(self, value, direction=None):
+        if value == empty:
+            directions = self.possible_values.keys()
+        elif direction not in self.possible_values.keys():
+            raise NonogramBadRequest(
+                "Can't work out what to do with these inputs {} {} in tile {}"
+                    .format(value, direction, repr(self))
+            )
+        else:
+            directions = [direction]
+
+        for direction, options in self.possible_values.iteritems():
+            if direction in directions:
+                if value not in options:
+                     raise NonogramBadRequest(
+                         "Trying to set tile {} to be {} but it's already not an option"
+                         .format(repr(self), value)
+                     )
+                else:
+                    self.possible_values[direction] = [value]
+            else:
+                # A direction not in the directions to set.
+                # That implies we are not setting it to "empty"
+                # Which implies we should remove "empty" in other directions.
+                if empty in options:
+                    self.possible_values[direction].remove(empty)
+        self.filled = (value != empty)
         self.check_if_decided()
 
     def __repr__(self):
@@ -121,13 +178,21 @@ class NonogramTile(object):
     def __str__(self):
         #return str((self.column, self.row))
         if self.filled:
+            return u'0'
+        elif any(self.decided.itervalues()):
+            # decided not filled means proven empty
+            return u'x'
+        else:
+            return u'.'
+
+    def __unicode__(self):
+        if self.filled:
             return u'█'
         elif any(self.decided.itervalues()):
             # decided not filled means proven empty
-            return 'x'
+            return u'x'
         else:
-            return '.'
-
+            return u'.'
 
 def nonograms_input_reader(filename):
     with open(filename) as handler:
