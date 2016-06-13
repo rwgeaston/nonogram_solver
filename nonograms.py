@@ -141,6 +141,7 @@ class NonogramTile(object):
         self.check_if_decided()
 
     def set_only_option(self, value, direction=None):
+        start_state = repr(self)
         if value == empty:
             directions = self.possible_values.keys()
         elif direction not in self.possible_values.keys():
@@ -168,6 +169,8 @@ class NonogramTile(object):
                     self.possible_values[direction].remove(empty)
         self.filled = (value != empty)
         self.check_if_decided()
+        # return whether anything has changed
+        return repr(self) != start_state
 
     def __repr__(self):
         return (

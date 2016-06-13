@@ -12,21 +12,18 @@ def generate_blocks(values, separator=empty):
 # most rules will need this
 def try_every_row_and_column(rule_function):
     def rule_function_try_every(self):
-        for index, row in enumerate(self.grid.rows):
-            if rule_function(self, index, row, 'row'):
+        for index, row in enumerate(self.rows):
+            if not self.completed('row', index) and rule_function(self, index, row, 'row'):
                 return True
-        for index, column in enumerate(self.grid.columns):
-            if rule_function(self, index, column, 'column'):
+        for index, column in enumerate(self.columns):
+            if not self.completed('column', index) and rule_function(self, index, column, 'column'):
                 return True
         return False
     return rule_function_try_every
 
 
-class NonogramSolver(object):
-    def __init__(self, row_values, column_values):
-        self.grid = NonogramGrid(row_values, column_values)
-
-    rules = ['fill_fully']
+class NonogramSolver(NonogramGrid):
+    rules = ['fill_fully', 'long_block_fill_middle']
 
     def try_all_rules(self):
         for rule in self.rules:
@@ -39,11 +36,30 @@ class NonogramSolver(object):
     # you can fill it in fully. crossed out positions at either end can be subtracted from target sum.
     @try_every_row_and_column
     def fill_fully(self, index, values, direction):
-        if self.grid.completed(direction, index):
-            return False
-        if sum(values) + len(values) - 1 == self.grid.size[direction]:
-            for tile, value in zip(self.grid.get_line(direction, index), generate_blocks(values)):
+        # TODO discount already eliminated tiles at the start and end
+        if sum(values) + len(values) - 1 == self.size[direction]:
+            for tile, value in zip(self.get_line(direction, index), generate_blocks(values)):
                 tile.set_only_option(value, direction)
             return True
         else:
             return False
+
+    @try_every_row_and_column
+    def long_block_fill_middle(self, index, values, direction):
+        # TODO consider not just values more than 1/2 size of entire row,
+        # but also more than 1/2 size of biggest remaining free section
+        # TODO allow space at either end for other values that have to fit
+        # i.e. 1,6 in a 10 has more information than just a 6 in a 10
+        highest = max(values)
+        if highest <= self.size[direction]/2:
+            return False
+
+        spaces_to_leave_either_end = self.size[direction] - highest
+        # tiles will tell us if anything changed
+        return any([
+            tile.set_only_option(highest, direction)
+            for tile in self.get_line(direction, index)[spaces_to_leave_either_end:-spaces_to_leave_either_end]
+        ])
+
+
+
