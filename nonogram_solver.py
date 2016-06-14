@@ -25,7 +25,7 @@ def try_every_row_and_column(rule_function):
 
 
 class NonogramSolver(NonogramGrid):
-    rules = ['fill_fully', 'long_block_fill_middle', 'cross_out_too_far_from_any_block']
+    rules = ['fill_fully', 'long_block_fill_middle', 'cross_out_too_far_from_any_block', 'got_enough_filled_or_not_filled']
 
     def try_all_rules(self):
         for rule in self.rules:
@@ -95,4 +95,46 @@ class NonogramSolver(NonogramGrid):
                     anything_changed += tile.set_only_option(block_length, direction)
         return anything_changed
 
+    @try_every_row_and_column
+    def got_enough_filled_or_not_filled(self, index, values, direction):
+        tiles = self.get_line(direction, index)
+        tiles_need_filled_in = sum(values)
+        tiles_need_not_filled = len(tiles) - tiles_need_filled_in
+        tiles_filled = []
+        tiles_definitely_empty = []
+        tiles_unknown = []
+        for tile in tiles:
+            if tile.decided[direction]:
+                if tile.filled:
+                    tiles_filled.append(tile)
+                else:
+                    tiles_definitely_empty.append(tile)
+            elif empty not in tile.possible_values[direction]:
+                tiles_filled.append(tile)
+            else:
+                tiles_unknown.append(tile)
+        if len(tiles_filled) > tiles_need_filled_in:
+            raise Exception(
+                "How can {} {} have more tiles filled than it's supposed to?"
+                .format(direction, index)
+            )
+        elif len(tiles_filled) == tiles_need_filled_in:
+            for tile in tiles_unknown:
+                tile.set_only_option(empty)
+            return bool(tiles_unknown)
 
+        if len(tiles_definitely_empty) > tiles_need_not_filled:
+            raise Exception(
+                "How can {} {} have more tiles definitely empty than it's supposed to?"
+                .format(direction, index)
+            )
+        elif len(tiles_definitely_empty) == tiles_need_not_filled:
+            position_to_fill = 0
+            for value in values:
+                for within_block_num in xrange(value):
+                    while tiles[position_to_fill] in tiles_definitely_empty:
+                        position_to_fill += 1
+                    tiles[position_to_fill].set_only_option(value, direction)
+                    position_to_fill += 1
+            return True
+        return False
