@@ -57,7 +57,7 @@ class NonogramGrid(list):
         else:
             raise NonogramBadRequest("This is not a direction! {}".format(direction))
 
-    def __str__(self):
+    def __unicode__(self):
         rows = ['']
         for negative_row in range(-self.max_column_options, 0):
             row = []
@@ -71,7 +71,7 @@ class NonogramGrid(list):
 
         rows.append(' ' * (self.max_row_options*2 + 1) + '_' * (len(self.columns)*2 - 1))
         for row_input_values, row_current_values in zip(self.rows, self):
-            actual_values = [str(tile) for tile in row_current_values]
+            actual_values = [unicode(tile) for tile in row_current_values]
             row_string = u'{}{} |{}'.format(
                 u' ' * (self.max_row_options - len(row_input_values)) * 2,
                 u','.join([str(value) for value in row_input_values]),
