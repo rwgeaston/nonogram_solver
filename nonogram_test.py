@@ -4,7 +4,7 @@ from nonograms import nonograms_input_reader
 from nonogram_solver import NonogramSolver
 
 local_folder = os.path.dirname(os.path.realpath(__file__))
-data = nonograms_input_reader(os.path.join(local_folder, "nonograms_data3.txt"))
+data = nonograms_input_reader(os.path.join(local_folder, "nonograms_data4.txt"))
 solver = NonogramSolver(data['rows'], data['columns'])
 print unicode(solver)
 
