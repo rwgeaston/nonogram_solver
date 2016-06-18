@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from nonograms import NonogramGrid, empty
+from nonograms import NonogramGrid, empty, empty_tile
 
 
 def generate_blocks(values, empty_at_start=0, separator=empty):
@@ -31,7 +31,7 @@ def try_every_row_and_column(rule_function):
 
 class NonogramSolver(NonogramGrid):
     rules = [
-        'fill_fully', 'long_block_fill_middle', 'cross_out_too_far_from_any_block',
+        'fill_fully', 'fill_middle', 'cross_out_too_far_from_any_block',
         'got_enough_filled_or_not_filled', 'fill_block_if_it_touches_edge',
         'rule_out_values_too_small_for_this_block', 'rule_out_values_based_on_already_used_up',
         'next_to_known_empty'
@@ -57,6 +57,7 @@ class NonogramSolver(NonogramGrid):
         else:
             return False
 
+    # entirely superseded by fill_middle
     @try_every_row_and_column
     def long_block_fill_middle(self, index, values, direction):
         # TODO consider not just values more than 1/2 size of entire row,
@@ -79,6 +80,51 @@ class NonogramSolver(NonogramGrid):
             tile.set_only_option(highest, direction)
             for tile in self.get_line(direction, index)[spaces_to_leave_at_start:-space_to_leave_at_end]
         ])
+
+    @try_every_row_and_column
+    def fill_middle(self, index, values, direction):
+        tiles = self.get_line(direction, index)
+        changes_made = False
+        for value in values:
+            # TODO think about how to make this work in a row with the same value twice
+            # might require a significant rethink of tiles
+            if values.count(value) == 1:
+                changes_made += self.fill_middle_this_value(index, values, direction, value, tiles)
+        return changes_made
+
+    def fill_middle_this_value(self, index, values, direction, value, tiles):
+        contiguous_spaces_this_value = self.get_contiguous_valid_spaces(value, tiles, direction)
+        changes_made = False
+        for start, length in contiguous_spaces_this_value:
+            if value > length:
+                for position in xrange(start, start + length):
+                    if value in tiles[position].possible_values[direction]:
+                        changes_made = True
+                        tiles[position].remove_option(value, direction)
+
+            if len(contiguous_spaces_this_value) == 1:
+                # Since there is only one place to put this block let's try to place the middle of it
+                start_placing = start + length - value
+                end_placing = start + value
+                for position in xrange(start_placing, end_placing):
+                    changes_made += tiles[position].set_only_option(value, direction)
+        return changes_made
+
+    def get_contiguous_valid_spaces(self, value, tiles, direction):
+        value_allowed_here = False
+        spaces = []
+        for index, tile in enumerate(tiles + [empty_tile]):
+            value_allowed_previous_tile, value_allowed_here = value_allowed_here, value in tile.possible_values[direction]
+            if value_allowed_here:
+                if value_allowed_previous_tile:
+                    length += 1
+                else:
+                    start = index
+                    length = 1
+            elif value_allowed_previous_tile:
+                spaces.append((start, length))
+        return spaces
+
 
     @try_every_row_and_column
     def cross_out_too_far_from_any_block(self, index, values, direction):
