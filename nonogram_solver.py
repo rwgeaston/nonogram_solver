@@ -25,7 +25,11 @@ def try_every_row_and_column(rule_function):
 
 
 class NonogramSolver(NonogramGrid):
-    rules = ['fill_fully', 'long_block_fill_middle', 'cross_out_too_far_from_any_block', 'got_enough_filled_or_not_filled']
+    rules = [
+        'fill_fully', 'long_block_fill_middle', 'cross_out_too_far_from_any_block',
+        'got_enough_filled_or_not_filled', 'fill_block_if_it_touches_edge',
+        'rule_out_values_too_small_for_this_block'
+    ]
 
     def try_all_rules(self):
         for rule in self.rules:
@@ -38,14 +42,8 @@ class NonogramSolver(NonogramGrid):
     # you can fill it in fully. crossed out positions at either end can be subtracted from target sum.
     @try_every_row_and_column
     def fill_fully(self, index, values, direction):
-        # TODO discount already eliminated tiles at the start and end
         tiles = self.get_line(direction, index)
-        empty_at_start = 0
-        while tiles[empty_at_start].decided[direction] and not tiles[empty_at_start].filled:
-            empty_at_start += 1
-        empty_at_end = 0
-        while tiles[-empty_at_end-1].decided[direction] and not tiles[-empty_at_end-1].filled:
-            empty_at_end += 1
+        empty_at_start, empty_at_end = self.get_empty_count_at_ends(tiles, direction)
         if sum(values) + len(values) - 1 == self.size[direction] - empty_at_start - empty_at_end:
             for tile, value in zip(self.get_line(direction, index), generate_blocks(values, empty_at_start)):
                 tile.set_only_option(value, direction)
@@ -61,14 +59,19 @@ class NonogramSolver(NonogramGrid):
         # i.e. 1,6 in a 10 has more information than just a 6 in a 10
         # TODO in fact generalise it to fit e.g. 4, 4 in a 10. Can fill a bunch of things from that.
         highest = max(values)
-        if highest <= self.size[direction]/2:
+        tiles = self.get_line(direction, index)
+        empty_at_start, empty_at_end = self.get_empty_count_at_ends(tiles, direction)
+        if highest <= (self.size[direction] - empty_at_start - empty_at_end)/2:
             return False
 
-        spaces_to_leave_either_end = self.size[direction] - highest
+        # tiles known to be definitely empty at the end mean we have to fill in more tiles at the start
+        spaces_to_leave_at_start = self.size[direction] - highest - empty_at_end
+        space_to_leave_at_end = self.size[direction] - highest - empty_at_start
+
         # tiles will tell us if anything changed
         return any([
             tile.set_only_option(highest, direction)
-            for tile in self.get_line(direction, index)[spaces_to_leave_either_end:-spaces_to_leave_either_end]
+            for tile in self.get_line(direction, index)[spaces_to_leave_at_start:-space_to_leave_at_end]
         ])
 
     @try_every_row_and_column
@@ -138,3 +141,30 @@ class NonogramSolver(NonogramGrid):
                     position_to_fill += 1
             return True
         return False
+
+    def get_empty_count_at_ends(self, tiles, direction):
+        empty_at_start = 0
+        while tiles[empty_at_start].decided[direction] and not tiles[empty_at_start].filled:
+            empty_at_start += 1
+        empty_at_end = 0
+        while tiles[-empty_at_end-1].decided[direction] and not tiles[-empty_at_end-1].filled:
+            empty_at_end += 1
+        return empty_at_start, empty_at_end
+
+    @try_every_row_and_column
+    def fill_block_if_it_touches_edge(self, index, values, direction):
+        # If the first or last tile is filled, we know the position of the entire first or last block
+        tiles = self.get_line(direction, index)
+        changes_made = False
+
+        if tiles[0].filled:
+            for position in xrange(values[0]):
+                changes_made += tiles[position].set_only_option(values[0], direction)
+            changes_made += tiles[values[0]].set_only_option(empty)
+
+        if tiles[-1].filled:
+            for position in xrange(values[-1]):
+                changes_made += tiles[-1-position].set_only_option(values[-1], direction)
+            changes_made += tiles[-1-values[-1]].set_only_option(empty)
+
+        return changes_made
