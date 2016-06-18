@@ -110,10 +110,16 @@ class NonogramTile(object):
         #print "creating: {}".format(repr(self))
 
     def check_if_decided(self):
+        might_be_empty = [not self.filled] + [empty in possible_values for possible_values in self.possible_values.itervalues()]
+        if True in might_be_empty and False in might_be_empty:
+            raise Exception(
+                "We have inconsistent information about whether this tile is filled or not: {}"
+                .format(repr(self))
+            )
         for direction, possible_values in self.possible_values.iteritems():
             possibilities_left = len(possible_values)
             if possibilities_left == 0:
-                raise NonogramImpossible("Tile {} can't take any values".format(self))
+                raise NonogramImpossible("Tile {} can't take any values".format(repr(self)))
             elif possibilities_left == 1:
                 self.decided[direction] = True
 
@@ -134,6 +140,8 @@ class NonogramTile(object):
                     .format(value, repr(self), direction)
                 )
             self.possible_values[direction].remove(value)
+            if self.possible_values[direction] == [empty]:
+                self.possible_values = {key:[empty] for key in self.possible_values}
         else:
             raise NonogramBadRequest(
                 "Can't work out what to do with these inputs '{}' '{}' in tile {}"
@@ -182,7 +190,8 @@ class NonogramTile(object):
     def convert_to_string(self, filled_char, show_filled_values=False):
         if self.filled:
             if show_filled_values and self.decided[show_filled_values]:
-                    return str(self.possible_values[show_filled_values][0])
+                # just take last digit of string so that 10 shows as 0 but at least it still fits in the grid
+                return str(self.possible_values[show_filled_values][0])[-1]
             return filled_char
         elif any(self.decided.itervalues()):
             # decided not filled means proven empty
