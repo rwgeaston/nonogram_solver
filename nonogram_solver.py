@@ -34,7 +34,8 @@ class NonogramSolver(NonogramGrid):
         'fill_fully', 'fill_middle', 'cross_out_too_far_from_any_block',
         'got_enough_filled_or_not_filled', 'fill_block_if_it_touches_edge',
         'rule_out_values_too_small_for_this_block', 'rule_out_values_based_on_already_used_up',
-        'next_to_known_empty'
+        'next_to_known_empty', 'remove_options_if_other_pieces_before_it',
+        'cross_out_too_far_from_known_value', 'block_long_enough'
     ]
 
     def try_all_rules(self):
@@ -86,10 +87,7 @@ class NonogramSolver(NonogramGrid):
         tiles = self.get_line(direction, index)
         changes_made = False
         for value in values:
-            # TODO think about how to make this work in a row with the same value twice
-            # might require a significant rethink of tiles
-            if values.count(value) == 1:
-                changes_made += self.fill_middle_this_value(index, values, direction, value, tiles)
+            changes_made += self.fill_middle_this_value(index, values, direction, value, tiles)
         return changes_made
 
     def fill_middle_this_value(self, index, values, direction, value, tiles):
@@ -102,7 +100,13 @@ class NonogramSolver(NonogramGrid):
                         changes_made = True
                         tiles[position].remove_option(value, direction)
 
-            if len(contiguous_spaces_this_value) == 1:
+        # TODO think about how to make this work in a row with the same value twice
+        # might require a significant rethink of tiles
+        if (
+            values.count(value) == len(contiguous_spaces_this_value) and
+            max((length for start, length in contiguous_spaces_this_value)) < 2 * value + 1
+        ):
+            for start, length in contiguous_spaces_this_value:
                 # Since there is only one place to put this block let's try to place the middle of it
                 start_placing = start + length - value
                 end_placing = start + value
@@ -313,4 +317,86 @@ class NonogramSolver(NonogramGrid):
                     last_tile_was_known_empty = False
 
                 should_fill = 0
+        return changes_made
+
+    @try_every_row_and_column
+    def remove_options_if_other_pieces_before_it(self, index, values, direction):
+        tiles = self.get_line(direction, index)
+        changes_made = False
+
+        for value in values:
+            if values.count(value) == 1:
+                changes_made += self.remove_options_if_other_pieces_one_value(index, values, direction, value, tiles)
+        return changes_made
+
+    def remove_options_if_other_pieces_one_value(self, index, values, direction, value, tiles):
+        changes_made = False
+        values_before = values[:values.index(value)]
+        values_after = values[values.index(value) + 1:]
+        minimum_space_before = sum(values_before) + len(values_before)
+        minimum_space_after = sum(values_after) + len(values_after)
+        for position in xrange(minimum_space_before):
+            if value in tiles[position].possible_values[direction]:
+                changes_made = True
+                tiles[position].remove_option(value, direction)
+                #print "{} {} {} can't fit in {}".format(direction, index, value, position)
+
+        for position in xrange(minimum_space_after):
+            if value in tiles[-1-position].possible_values[direction]:
+                changes_made = True
+                tiles[-1-position].remove_option(value, direction)
+                #print "{} {} {} can't fit in {}".format(direction, index, value, -1-position)
+
+        return changes_made
+
+    @try_every_row_and_column
+    def cross_out_too_far_from_known_value(self, index, values, direction):
+        tiles = self.get_line(direction, index)
+        changes_made = False
+
+        for position, tile in enumerate(tiles):
+            if tile.filled and tile.decided[direction]:
+                value = tile.possible_values[direction][0]
+                if values.count(value) == 1:
+                    changes_made += self.try_to_remove_far_away_tiles_from_known_value(
+                        tiles, direction, position, tile, value
+                    )
+        return changes_made
+
+    def try_to_remove_far_away_tiles_from_known_value(self, tiles, direction, position, tile, value):
+        changes_made = False
+
+        for position_to_change, tile_might_change in enumerate(tiles):
+            if abs(position - position_to_change) >= value and value in tile_might_change.possible_values[direction]:
+                changes_made = True
+                tile_might_change.remove_option(value, direction)
+        return changes_made
+
+    @try_every_row_and_column
+    def block_long_enough(self, index, values, direction):
+        tiles = self.get_line(direction, index)
+        changes_made = False
+        last_tile_filled = False
+        value_this_block = 'unknown'
+        for position, tile in enumerate(tiles):
+            if tile.filled:
+                if last_tile_filled:
+                    length_contiguous += 1
+                else:
+                    start_contiguous = position
+                    length_contiguous = 1
+                if tile.decided[direction]:
+                    value_this_block = tile.possible_values[direction][0]
+                last_tile_filled = True
+            if not tile.filled:
+                if value_this_block != 'unknown':
+                    if value_this_block == length_contiguous:
+                        # we've found the whole thing so let's put empties either end
+                        changes_made += tile.set_only_option(empty)
+                        if start_contiguous > 0:
+                            changes_made += tiles[start_contiguous - 1].set_only_option(empty)
+                    for tile_to_check in tiles[start_contiguous:start_contiguous+length_contiguous]:
+                        changes_made += tile_to_check.set_only_option(value_this_block, direction)
+                value_this_block = 'unknown'
+                last_tile_filled = False
         return changes_made
