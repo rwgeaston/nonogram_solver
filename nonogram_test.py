@@ -9,4 +9,5 @@ print data
 solver = NonogramSolver(data['rows'], data['columns'])
 print solver
 while solver.try_all_rules():
-    print unicode(solver)
+    print solver.__unicode__('row')
+    print solver.__unicode__('column')

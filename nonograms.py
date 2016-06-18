@@ -57,7 +57,7 @@ class NonogramGrid(list):
         else:
             raise NonogramBadRequest("This is not a direction! {}".format(direction))
 
-    def __unicode__(self):
+    def __unicode__(self, show_filled_values=False):
         rows = ['']
         for negative_row in range(-self.max_column_options, 0):
             row = []
@@ -71,7 +71,7 @@ class NonogramGrid(list):
 
         rows.append(' ' * (self.max_row_options*2 + 1) + '_' * (len(self.columns)*2 - 1))
         for row_input_values, row_current_values in zip(self.rows, self):
-            actual_values = [unicode(tile) for tile in row_current_values]
+            actual_values = [tile.__unicode__(show_filled_values) for tile in row_current_values]
             row_string = u'{}{} |{}'.format(
                 u' ' * (self.max_row_options - len(row_input_values)) * 2,
                 u','.join([str(value) for value in row_input_values]),
@@ -178,24 +178,23 @@ class NonogramTile(object):
             .format(self.column, self.row, self.filled, self.decided, self.possible_values)
         )
 
-    def __str__(self):
-        #return str((self.column, self.row))
+    def convert_to_string(self, filled_char, show_filled_values=False):
         if self.filled:
-            return u'0'
+            if show_filled_values and self.decided[show_filled_values]:
+                    return str(self.possible_values[show_filled_values][0])
+            return filled_char
         elif any(self.decided.itervalues()):
             # decided not filled means proven empty
-            return u'x'
+            return 'x'
         else:
-            return u'.'
+            return '.'
 
-    def __unicode__(self):
-        if self.filled:
-            return u'█'
-        elif any(self.decided.itervalues()):
-            # decided not filled means proven empty
-            return u'x'
-        else:
-            return u'.'
+    def __str__(self, show_filled_values=False):
+        return self.convert_to_string('0', show_filled_values)
+
+    def __unicode__(self, show_filled_values=False):
+        return self.convert_to_string(u'█', show_filled_values)
+
 
 def nonograms_input_reader(filename):
     with open(filename) as handler:
