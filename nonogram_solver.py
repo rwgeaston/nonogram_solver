@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from nonograms import NonogramGrid, empty
 
 
@@ -9,6 +11,9 @@ def generate_blocks(values, empty_at_start=0, separator=empty):
             yield value
         yield separator
 
+def normal(whatever):
+    # for syntactic reasons i want the null function later
+    return whatever
 
 # decorator that takes a rule aimed at one row or column and does the whole lot
 # most rules will need this
@@ -16,10 +21,10 @@ def try_every_row_and_column(rule_function):
     def rule_function_try_every(self):
         for index, row in enumerate(self.rows):
             if not self.completed('row', index) and rule_function(self, index, row, 'row'):
-                return True
+                return "row {}".format(index)
         for index, column in enumerate(self.columns):
             if not self.completed('column', index) and rule_function(self, index, column, 'column'):
-                return True
+                return "column {}".format(index)
         return False
     return rule_function_try_every
 
@@ -28,14 +33,15 @@ class NonogramSolver(NonogramGrid):
     rules = [
         'fill_fully', 'long_block_fill_middle', 'cross_out_too_far_from_any_block',
         'got_enough_filled_or_not_filled', 'fill_block_if_it_touches_edge',
-        'rule_out_values_too_small_for_this_block'
+        'rule_out_values_too_small_for_this_block', 'rule_out_values_based_on_already_used_up',
+        'next_to_known_empty'
     ]
 
     def try_all_rules(self):
         for rule in self.rules:
-            if getattr(self, rule)():
-                print "We made progress using the '{}' rule:".format(rule)
-                return True
+            outcome = getattr(self, rule)()
+            if outcome:
+                return "We made progress using the '{}' rule ({}):".format(rule, outcome)
         return False
 
     # if the values for one row + the number of values - 1 is equal to the length of the row,
@@ -167,4 +173,98 @@ class NonogramSolver(NonogramGrid):
                 changes_made += tiles[-1-position].set_only_option(values[-1], direction)
             changes_made += tiles[-1-values[-1]].set_only_option(empty)
 
+        return changes_made
+
+    @try_every_row_and_column
+    def rule_out_values_too_small_for_this_block(self, index, values, direction):
+        tiles = self.get_line(direction, index)
+        changes_made = False
+        length_contiguous_blocks = self.get_contiguous_lengths(tiles)
+        for block_size, tile in zip(length_contiguous_blocks, tiles):
+            if block_size > 0:
+                for value in values:
+                    if value < block_size and value in tile.possible_values[direction]:
+                        changes_made = True
+                        tile.remove_option(value, direction)
+        return changes_made
+
+    def get_contiguous_lengths(self, tiles):
+        length_contiguous_blocks = []
+        current_contiguous_length = 0
+        for tile in tiles:
+            if tile.filled:
+                current_contiguous_length += 1
+            else:
+                if current_contiguous_length:
+                    length_contiguous_blocks.extend([current_contiguous_length]*current_contiguous_length)
+                length_contiguous_blocks.append(0)
+                current_contiguous_length = 0
+        if current_contiguous_length:
+            length_contiguous_blocks.extend([current_contiguous_length] * current_contiguous_length)
+        if len(length_contiguous_blocks) != len(tiles):
+            raise Exception(
+                "You lost some values there this function is dodgy {}, {}"
+                .format(length_contiguous_blocks, "".join([str(tile) for tile in tiles]))
+            )
+        return length_contiguous_blocks
+
+    @try_every_row_and_column
+    def rule_out_values_based_on_already_used_up(self, index, values, direction):
+        # Is this really an extension of 'got_enough_filled_or_not_filled'?
+        tiles = self.get_line(direction, index)
+        observed_counts = defaultdict(int)
+
+        for tile in tiles:
+            if tile.decided[direction]:
+                observed_counts[tile.possible_values[direction][0]] += 1
+
+        max_allowed_counts = defaultdict(int)
+        for value in values:
+            # this looks a bit funky but it's because we might have two 4 groups therefore need 8 "4" tiles
+            max_allowed_counts[value] += value
+
+        used_up = [key for key, value in observed_counts.iteritems() if value == max_allowed_counts[key]]
+        if not used_up:
+            return False
+
+        changes_made = False
+        for tile in tiles:
+            if not tile.decided[direction]:
+                for value in used_up:
+                    if value in tile.possible_values[direction]:
+                        changes_made = True
+                        tile.remove_option(value, direction)
+        return changes_made
+
+
+    @try_every_row_and_column
+    def next_to_known_empty(self, index, values, direction):
+        # basically generalisation of 'fill_block_if_it_touches_edge'
+        tiles = self.get_line(direction, index)
+        changes_made = False
+
+        for search_direction in [normal, reversed]:
+            last_tile_was_known_empty = True
+            to_fill_count = 0
+            fill_with = '-'
+            for tile in search_direction(tiles):
+                if to_fill_count:
+                    if to_fill_count == 1:
+                        # last tile to fill is actually the empty one after the block ends
+                        changes_made += tile.set_only_option(empty, direction)
+                        last_tile_was_known_empty = True
+                    else:
+                        changes_made += tile.set_only_option(fill_with, direction)
+                    to_fill_count -= 1
+                    continue
+
+                if last_tile_was_known_empty and tile.filled and tile.decided[direction]:
+                    fill_with = to_fill_count = tile.possible_values[direction][0]
+
+                if not tile.filled and tile.decided[direction]:
+                    last_tile_was_known_empty = True
+                else:
+                    last_tile_was_known_empty = False
+
+                should_fill = 0
         return changes_made

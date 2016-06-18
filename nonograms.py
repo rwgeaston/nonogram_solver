@@ -33,7 +33,7 @@ class NonogramGrid(list):
         assert all(isinstance(column, list) for column in self.columns)
 
     def get_value(self, column, row):
-        return self[column][row]
+        return self[row][column]
 
     def get_row(self, vert):
         return self[vert]
@@ -97,8 +97,8 @@ class NonogramTile(object):
         self.column = column
         self.row = row
         self.possible_values = {
-            'row': copy(possible_values_row),
-            'column': copy(possible_values_column)
+            'row': list(set(possible_values_row)),
+            'column': list(set(possible_values_column))
         }
         for options in self.possible_values.itervalues():
             options.append(empty)
@@ -127,7 +127,7 @@ class NonogramTile(object):
                 "You can't remove an value from a tile without saying which direction it's not valid in"
             )
         elif direction in self.possible_values:
-            if value not in self.possible_values['direction']:
+            if value not in self.possible_values[direction]:
                 raise NonogramBadRequest(
                     "Can't remove {} from {} {}-wise"
                     .format(value, repr(self), direction)
