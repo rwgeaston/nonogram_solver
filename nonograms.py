@@ -72,9 +72,10 @@ class NonogramGrid(list):
         rows.append(' ' * (self.max_row_options*2 + 1) + '_' * (len(self.columns)*2 - 1))
         for row_input_values, row_current_values in zip(self.rows, self):
             actual_values = [tile.__unicode__(show_filled_values) for tile in row_current_values]
+            block_sizes = u','.join([str(value) for value in row_input_values])
             row_string = u'{}{} |{}'.format(
-                u' ' * (self.max_row_options - len(row_input_values)) * 2,
-                u','.join([str(value) for value in row_input_values]),
+                u' ' * (self.max_row_options*2 - len(block_sizes) - 1),
+                block_sizes,
                 u' '.join(actual_values)
             )
             rows.append(row_string)
@@ -207,3 +208,6 @@ def nonograms_input_reader(filename):
         else:
             inputs[next_input].append([int(value) for value in line.split(',')])
     return inputs
+
+empty_tile = NonogramTile(0, 0, [], [])
+empty_tile.set_only_option(empty)
