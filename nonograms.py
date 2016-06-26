@@ -15,8 +15,8 @@ class NonogramGrid(list):
         super(NonogramGrid, self).__init__()
         self.columns = column_values
         self.rows = row_values
-        self.max_column_options = max((len(values) for values in column_values))
-        self.max_row_options = max((len(values) for values in row_values))
+        self.max_column_options = max((len(','.join(map(str, values))) for values in column_values))
+        self.max_row_options = max((len(','.join(map(str, values))) for values in row_values))
         # self.size['row'] tells us the size of a row i.e. the width of the grid i.e. how many columns.
         self.size = {'row': len(self.columns), 'column': len(self.rows)}
         self.enforce_inputs()
